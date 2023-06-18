@@ -4,54 +4,109 @@
 # https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md#how-to-contribute-code
 
 from ccxt.base.exchange import Exchange
-import math
+from ccxt.abstract.stex import ImplicitAPI
+from ccxt.base.types import OrderSide
+from typing import Optional
+from typing import List
 from ccxt.base.errors import ExchangeError
-from ccxt.base.errors import AuthenticationError
 from ccxt.base.errors import PermissionDenied
+from ccxt.base.errors import AccountSuspended
 from ccxt.base.errors import ArgumentsRequired
 from ccxt.base.errors import BadRequest
+from ccxt.base.errors import BadSymbol
 from ccxt.base.errors import InsufficientFunds
+from ccxt.base.errors import InvalidOrder
 from ccxt.base.errors import OrderNotFound
 from ccxt.base.errors import DDoSProtection
+from ccxt.base.errors import AuthenticationError
+from ccxt.base.decimal_to_precision import TICK_SIZE
+from ccxt.base.precise import Precise
 
 
-class stex(Exchange):
+class stex(Exchange, ImplicitAPI):
 
     def describe(self):
         return self.deep_extend(super(stex, self).describe(), {
             'id': 'stex',
-            'name': 'STEX',  # formerly known as stocks.exchange
+            'name': 'STEX',  # formerly known.exchange
             'countries': ['EE'],  # Estonia
-            'rateLimit': 500,  # https://help.stex.com/en/articles/2815043-api-3-rate-limits
+            'rateLimit': 1000 / 3,  # https://help.stex.com/en/articles/2815043-api-3-rate-limits
             'certified': False,
             # new metainfo interface
             'has': {
-                'CORS': False,
-                'createMarketOrder': False,  # limit orders only
-                'fetchCurrencies': True,
-                'fetchMarkets': True,
-                'fetchTicker': True,
-                'fetchTickers': True,
-                'fetchOrderBook': True,
-                'fetchOHLCV': True,
+                'CORS': None,
+                'spot': True,
+                'margin': False,
+                'swap': False,
+                'future': False,
+                'option': False,
+                'addMargin': False,
+                'cancelAllOrders': True,
+                'cancelOrder': True,
+                'createDepositAddress': True,
+                'createMarketOrder': False,
+                'createOrder': True,
+                'createReduceOnlyOrder': False,
                 'fetchBalance': True,
+                'fetchBorrowRate': False,
+                'fetchBorrowRateHistories': False,
+                'fetchBorrowRateHistory': False,
+                'fetchBorrowRates': False,
+                'fetchBorrowRatesPerSymbol': False,
+                'fetchClosedOrder': True,
+                'fetchCurrencies': True,
+                'fetchDeposit': True,
+                'fetchDepositAddress': True,
+                'fetchDeposits': True,
+                'fetchDepositWithdrawFee': 'emulated',
+                'fetchDepositWithdrawFees': True,
+                'fetchFundingHistory': False,
+                'fetchFundingRate': False,
+                'fetchFundingRateHistory': False,
+                'fetchFundingRates': False,
+                'fetchIndexOHLCV': False,
+                'fetchLeverage': False,
+                'fetchLeverageTiers': False,
+                'fetchMarginMode': False,
+                'fetchMarkets': True,
+                'fetchMarkOHLCV': False,
+                'fetchMyTrades': True,
+                'fetchOHLCV': True,
+                'fetchOpenInterestHistory': False,
                 'fetchOpenOrders': True,
                 'fetchOrder': True,
-                'fetchMyTrades': True,
+                'fetchOrderBook': True,
                 'fetchOrderTrades': True,
-                'fetchDepositAddress': True,
-                'createDepositAddress': True,
-                'fetchDeposits': True,
+                'fetchPosition': False,
+                'fetchPositionMode': False,
+                'fetchPositions': False,
+                'fetchPositionsRisk': False,
+                'fetchPremiumIndexOHLCV': False,
+                'fetchTicker': True,
+                'fetchTickers': True,
+                'fetchTime': True,
+                'fetchTrades': True,
+                'fetchTradingFee': True,
+                'fetchTradingFees': False,
+                'fetchTransactionFees': True,
+                'fetchWithdrawal': True,
                 'fetchWithdrawals': True,
+                'reduceMargin': False,
+                'setLeverage': False,
+                'setMarginMode': False,
+                'setPositionMode': False,
+                'transfer': True,
                 'withdraw': True,
-                'fetchFundingFees': True,
             },
             'version': 'v3',
             'urls': {
                 'logo': 'https://user-images.githubusercontent.com/1294454/69680782-03fd0b80-10bd-11ea-909e-7f603500e9cc.jpg',
-                'api': 'https://api3.stex.com',
+                'api': {
+                    'rest': 'https://api3.stex.com',
+                },
                 'www': 'https://www.stex.com',
                 'doc': [
+                    'https://apidocs.stex.com/',
                     'https://help.stex.com/en/collections/1593608-api-v3-documentation',
                 ],
                 'fees': 'https://app.stex.com/en/pairs-specification',
@@ -73,123 +128,173 @@ class stex(Exchange):
             },
             'api': {
                 'public': {
-                    'get': [
-                        'currencies',  # Available Currencies
-                        'currencies/{currencyId}',  # Get currency info
-                        'markets',  # Available markets
-                        'pairs-groups',  # Available currency pairs groups(as displayed at stex trading page)
-                        'currency_pairs/list/{code}',  # Available currency pairs
-                        'currency_pairs/group/{currencyPairGroupId}',  # Available currency pairs for a given group
-                        'currency_pairs/{currencyPairId}',  # Get currency pair information
-                        'ticker',  # Tickers list for all currency pairs
-                        'ticker/{currencyPairId}',  # Ticker for currency pair
-                        'trades/{currencyPairId}',  # Trades for given currency pair
-                        'orderbook/{currencyPairId}',  # Orderbook for given currency pair
-                        'chart/{currencyPairId}/{candlesType}',  # A list of candles for given currency pair
-                        'deposit-statuses',  # Available Deposit Statuses
-                        'deposit-statuses/{statusId}',  # Get deposit status info
-                        'withdrawal-statuses',  # Available Withdrawal Statuses
-                        'withdrawal-statuses/{statusId}',  # Get status info
-                        'ping',  # Test API is working and get server time
-                        'mobile-versions',  # Shows the official mobile applications data
-                    ],
+                    'get': {
+                        'currencies': 1,  # Available Currencies
+                        'currencies/{currencyId}': 1,  # Get currency info
+                        'markets': 1,  # Available markets
+                        'pairs-groups': 1,  # Available currency pairs groups(as displayed at stex trading page)
+                        'currency_pairs/list/{code}': 1,  # Available currency pairs
+                        'currency_pairs/group/{currencyPairGroupId}': 1,  # Available currency pairs for a given group
+                        'currency_pairs/{currencyPairId}': 1,  # Get currency pair information
+                        'ticker': 1,  # Tickers list for all currency pairs
+                        'ticker/{currencyPairId}': 1,  # Ticker for currency pair
+                        'trades/{currencyPairId}': 1,  # Trades for given currency pair
+                        'orderbook/{currencyPairId}': 1,  # Orderbook for given currency pair
+                        'chart/{currencyPairId}/{candlesType}': 1,  # A list of candles for given currency pair
+                        'deposit-statuses': 1,  # Available Deposit Statuses
+                        'deposit-statuses/{statusId}': 1,  # Get deposit status info
+                        'withdrawal-statuses': 1,  # Available Withdrawal Statuses
+                        'withdrawal-statuses/{statusId}': 1,  # Get status info
+                        'ping': 1,  # Test API is working and get server time
+                        'mobile-versions': 1,  # Shows the official mobile applications data
+                        'twitter': 1,  # Get the last 20 posts(stex.com) on Twitter
+                    },
                 },
                 'trading': {
-                    'get': [
-                        'fees/{currencyPairId}',  # Returns the user's fees for a given currency pair
-                        'orders',  # List your currently open orders
-                        'orders/{currencyPairId}',  # List your currently open orders for given currency pair
-                        'order/{orderId}',  # Get a single order
-                    ],
-                    'post': [
-                        'orders/{currencyPairId}',  # Create new order and put it to the orders processing queue
-                    ],
-                    'delete': [
-                        'orders',  # Delete all active orders
-                        'orders/{currencyPairId}',  # Delete active orders for given currency pair
-                        'order/{orderId}',  # Cancel order
-                    ],
+                    'get': {
+                        'fees/{currencyPairId}': 1,  # Returns the user's fees for a given currency pair
+                        'orders': 12,  # List your currently open orders
+                        'orders/{currencyPairId}': 6,  # List your currently open orders for given currency pair
+                        'order/{orderId}': 12,  # Get a single order
+                    },
+                    'post': {
+                        'orders/{currencyPairId}': 1.5,  # Create new order and put it to the orders processing queue
+                        'orders/bulk/{currencyPairId}': 12,  # Create new orders in a bulk and put it to the orders processing queue
+                    },
+                    'delete': {
+                        'orders': 30,  # Delete all active orders
+                        'orders/{currencyPairId}': 12,  # Delete active orders for given currency pair
+                        'order/{orderId}': 1.5,  # Cancel order
+                    },
                 },
                 'reports': {
-                    'get': [
-                        'orders',  # Get past orders
-                        'orders/{orderId}',  # Get specified order details
-                        'trades/{currencyPairId}',  # Get a list of user trades according to request parameters
-                        'background/{listMode}',  # Get reports list for category
-                        'background/{id}',  # Get some report info
-                        'background/download/{id}',  # Get file by id
-                    ],
-                    'post': [
-                        'background/create',  # Create new report
-                    ],
-                    'delete': [
-                        'background/{id}',  # Remove report by id
-                    ],
+                    'get': {
+                        'currencies': 12,  # Get a list of currencies user had any activity in
+                        'currency_pairs': 12,  # Gets the list of currency pairs the user had orders in for all the time
+                        'orders': 12,  # Get past orders
+                        'orders/{orderId}': 12,  # Get specified order details
+                        'trades/{currencyPairId}': 12,  # Get a list of user trades according to request parameters
+                        'background/{listMode}': 12,  # Get reports list for category
+                        'background/{id}': 12,  # Get some report info
+                        'background/download/{id}': 12,  # Get file by id
+                    },
+                    'post': {
+                        'background/create': 12,  # Create new report
+                    },
+                    'delete': {
+                        'background/{id}': 12,  # Remove report by id
+                    },
                 },
                 'profile': {
-                    'get': [
-                        'info',  # Account information
-                        'wallets',  # Get a list of user wallets
-                        'wallets/{walletId}',  # Single wallet information
-                        'wallets/address/{walletId}',  # Get deposit address for given wallet
-                        'deposits',  # Get a list of deposits made by user
-                        'deposits/{id}',  # Get deposit by id
-                        'withdrawals',  # Get a list of withdrawals made by user
-                        'withdrawals/{id}',  # Get withdrawal by id
-                        'notifications',  # Get notifications
-                        'favorite/currency_pairs',  # Get favorite currency pairs
-                        'token-scopes',  # Get current token scopes
-                    ],
-                    'post': [
-                        'wallets/burn/{walletId}',  # Burns the given wallet
-                        'wallets/{currencyId}',  # Create a wallet for given currency
-                        'wallets/address/{walletId}',  # Create new deposit address
-                        'withdraw',  # Create withdrawal request
-                        'referral/program',  # Create referral program
-                        'referral/insert/{code}',  # Insert referral code
-                        'referral/bonus_transfer/{currencyId}',  # Transfer referral bonuses balance to main balance for given currency
-                    ],
-                    'put': [
-                        'profile/favorite/currency_pairs/set',  # Set favorite currency pairs
-                    ],
-                    'delete': [
-                        'profile/withdraw/{withdrawalId}',  # Cancel unconfirmed withdrawal
-                    ],
+                    'get': {
+                        'info': 3,  # Account information
+                        'wallets': 3,  # Get a list of user wallets
+                        'wallets/{walletId}': 3,  # Single wallet information
+                        'wallets/address/{walletId}': 3,  # Get deposit address for given wallet
+                        'deposits': 3,  # Get a list of deposits made by user
+                        'deposits/{id}': 3,  # Get deposit by id
+                        'rewards': 3,  # Get a list of rewards obtained by user(e.g. in trading competitions)
+                        'rewards/{id}': 3,  # Get reward by id
+                        'addressbook': 3,  # Get a list of user address book items
+                        'addressbook/{itemId}': 3,  # Single address book item
+                        'withdrawals': 3,  # Get a list of withdrawals made by user
+                        'withdrawals/{id}': 3,  # Get withdrawal by id
+                        'notifications': 3,  # Get notifications
+                        'notifications/price': 3,  # Get a list of active price alerts
+                        'favorite/currency_pairs': 3,  # Get favorite currency pairs
+                        'token-scopes': 3,  # Get current token scopes
+                    },
+                    'post': {
+                        'wallets/burn/{walletId}': 3,  # Burns the given wallet
+                        'wallets/{walletId}/hold_amount': 3,  # Move a part of the funds on the wallet to the "hold" to keep it safe from trading
+                        'wallets/{currencyId}': 3,  # Create a wallet for given currency
+                        'wallets/address/{walletId}': 3,  # Create new deposit address
+                        'addressbook/disable_item/{itemId}': 3,  # Disables the address book item
+                        'addressbook/enable_item/{itemId}': 3,  # Enable the address book item
+                        'addressbook/enable_strict_wd': 3,  # Restrict the withdrawals to only addresses that are active in addressbook
+                        'addressbook/disable_strict_wd': 3,  # Remove restriction to withdraw to only addresses that are active in addressbook. E.g. allow to withdraw to any address.
+                        'withdraw': 30,  # Create withdrawal request
+                        'notifications/price': 3,  # Create new price alert
+                        'referral/program': 3,  # Create referral program
+                        'referral/insert/{code}': 3,  # Insert referral code
+                        'referral/bonus_transfer/{currencyId}': 3,  # Transfer referral bonuses balance to main balance for given currency
+                    },
+                    'put': {
+                        'favorite/currency_pairs/set': 3,  # Set favorite currency pairs
+                    },
+                    'delete': {
+                        'addressbook/{itemId}': 3,  # Deletes address book item
+                        'withdraw/{withdrawalId}': 30,  # Cancel unconfirmed withdrawal
+                        'notifications/price/{priceAlertId}': 3,  # Delete the price alert by ID
+                    },
                 },
                 'verification': {
-                    'get': [
-                        'verification/countries',  # Countries list, beta
-                        'verification/stex',  # Get information about your KYC, beta
-                    ],
-                    'post': [
-                        'verification/stex',  # Update information regarding of your KYC verification, beta
-                    ],
+                    'get': {
+                        'countries': 1,  # Countries list, beta
+                        'status': 1,  # Get status verify
+                        'fractal/url': 1,  # Generate verify url from Fractal
+                        'smart-id': 1,  # Check Smart-ID verify
+                        'stex': 1,  # Get information about your KYC, beta
+                        'cryptonomica/code': 1,  # Get Discount code for Cryptonomica
+                    },
+                    'post': {
+                        'smart-id': 1,  # Initialization Smart-ID verify(Send request to Smart-ID App)
+                        'stex': 1,  # Update information regarding of your KYC verification, beta
+                        'cryptonomica': 1,  # Add verification from Cryptonomica
+                    },
                 },
                 'settings': {
-                    'get': [
-                        'notifications/{event}',  # User event notification settings
-                        'notifications',  # User events notification settings
-                    ],
-                    'put': [
-                        'notifications',  # Set notification settings
-                        'notifications/set',
-                    ],
+                    'get': {
+                        'notifications/{event}': 1,  # User event notification settings
+                        'notifications': 1,  # User events notification settings
+                    },
+                    'put': {
+                        'notifications': 1,  # Set notification settings
+                        'notifications/set': 1,
+                    },
                 },
             },
             'fees': {
                 'trading': {
                     'tierBased': False,
                     'percentage': True,
-                    'taker': 0.002,
-                    'maker': 0.002,
+                    'taker': self.parse_number('0.002'),
+                    'maker': self.parse_number('0.002'),
                 },
             },
             'commonCurrencies': {
+                'BC': 'Bitcoin Confidential',
+                'BITS': 'Bitcoinus',
+                'BITSW': 'BITS',
                 'BHD': 'Bithold',
+                'BTH': 'Bithereum',
+                'MPH': 'Chasyr Token',
+                'SBTC': 'SBTCT',  # SiamBitcoin
             },
             'options': {
                 'parseOrderToPrecision': False,
+                'networks': {
+                    'ERC20': 5,
+                    'ETH': 5,
+                    'OMNI': 10,
+                    'XLM': 20,
+                    'BEP2': 22,
+                    'TRC20': 24,
+                    'TRX': 24,
+                    'SOL': 25,
+                    'BEP20': 501,
+                },
+                'accountsByType': {
+                    'spot': 'spot',
+                    'hold': 'hold',
+                    'funding': 'funding',
+                    'referal': 'referal',
+                },
+                'transfer': {
+                    'fillResponseFromRequest': True,
+                },
             },
+            'precisionMode': TICK_SIZE,
             'exceptions': {
                 'exact': {
                     # {"success":false,"message":"Wrong parameters","errors":{"candleType":["Invalid Candle Type!"]}}
@@ -199,6 +304,10 @@ class stex(Exchange):
                     'Server Error': ExchangeError,  # {"message": "Server Error"}
                     'This feature is only enabled for users verifies by Cryptonomica': PermissionDenied,  # {"success":false,"message":"This feature is only enabled for users verifies by Cryptonomica"}
                     'Too Many Attempts.': DDoSProtection,  # {"message": "Too Many Attempts."}
+                    'Selected Pair is disabled': BadSymbol,  # {"success":false,"message":"Selected Pair is disabled"}
+                    'Invalid scope(s) provided.': PermissionDenied,  # {"message": "Invalid scope(s) provided."}
+                    'The maximum amount of open orders with the same price cannot exceed 10': InvalidOrder,  # {"success":false,"message":"The maximum amount of open orders with the same price cannot exceed 10"}
+                    'Your account not verified!': AccountSuspended,  # {"success":false,"message":"Your account not verified!","unified_message":{"message_id":"verification_required_to_continue","substitutions":null},"notice":"Please be informed that parameter `message` is deprecated and will be removed. Use unified_message instead."}
                 },
                 'broad': {
                     'Not enough': InsufficientFunds,  # {"success":false,"message":"Not enough  ETH"}
@@ -207,6 +316,12 @@ class stex(Exchange):
         })
 
     def fetch_currencies(self, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1currencies/get
+        fetches all available currencies on an exchange
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: an associative dictionary of currencies
+        """
         response = self.publicGetCurrencies(params)
         #
         #     {
@@ -246,8 +361,8 @@ class stex(Exchange):
             # to add support for multiple withdrawal/deposit methods and
             # differentiated fees for each particular method
             code = self.safe_currency_code(self.safe_string(currency, 'code'))
-            precision = self.safe_integer(currency, 'precision')
-            fee = self.safe_float(currency, 'withdrawal_fee_const')  # todo: redesign
+            precision = self.parse_number(self.parse_precision(self.safe_string(currency, 'precision')))
+            fee = self.safe_number(currency, 'withdrawal_fee_const')  # todo: redesign
             active = self.safe_value(currency, 'active', True)
             result[code] = {
                 'id': id,
@@ -257,25 +372,35 @@ class stex(Exchange):
                 'type': None,
                 'name': self.safe_string(currency, 'name'),
                 'active': active,
+                'deposit': None,
+                'withdraw': None,
                 'fee': fee,
                 'precision': precision,
                 'limits': {
-                    'amount': {'min': math.pow(10, -precision), 'max': None},
-                    'price': {'min': math.pow(10, -precision), 'max': None},
-                    'cost': {'min': None, 'max': None},
+                    'amount': {
+                        'min': precision,
+                        'max': None,
+                    },
                     'deposit': {
-                        'min': self.safe_float(currency, 'minimum_deposit_amount'),
+                        'min': self.safe_number(currency, 'minimum_deposit_amount'),
                         'max': None,
                     },
                     'withdraw': {
-                        'min': self.safe_float(currency, 'minimum_withdrawal_amount'),
+                        'min': self.safe_number(currency, 'minimum_withdrawal_amount'),
                         'max': None,
                     },
                 },
+                'networks': {},
             }
         return result
 
     def fetch_markets(self, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1currency_pairs~1list~1{code}/get
+        retrieves data on all markets for stex
+        :param dict params: extra parameters specific to the exchange api endpoint
+        :returns [dict]: an array of objects representing market data
+        """
         request = {
             'code': 'ALL',
         }
@@ -321,48 +446,75 @@ class stex(Exchange):
             quoteNumericId = self.safe_integer(market, 'market_currency_id')
             base = self.safe_currency_code(self.safe_string(market, 'currency_code'))
             quote = self.safe_currency_code(self.safe_string(market, 'market_code'))
-            symbol = base + '/' + quote
-            precision = {
-                'amount': self.safe_integer(market, 'currency_precision'),
-                'price': self.safe_integer(market, 'market_precision'),
-            }
-            active = self.safe_value(market, 'active')
-            minBuyPrice = self.safe_float(market, 'min_buy_price')
-            minSellPrice = self.safe_float(market, 'min_sell_price')
-            minPrice = max(minBuyPrice, minSellPrice)
-            buyFee = self.safe_float(market, 'buy_fee_percent') / 100
-            sellFee = self.safe_float(market, 'sell_fee_percent') / 100
-            fee = max(buyFee, sellFee)
+            minBuyPrice = self.safe_string(market, 'min_buy_price')
+            minSellPrice = self.safe_string(market, 'min_sell_price')
+            minPrice = Precise.string_max(minBuyPrice, minSellPrice)
+            buyFee = Precise.string_div(self.safe_string(market, 'buy_fee_percent'), '100')
+            sellFee = Precise.string_div(self.safe_string(market, 'sell_fee_percent'), '100')
+            fee = self.parse_number(Precise.string_max(buyFee, sellFee))
             result.append({
                 'id': id,
                 'numericId': numericId,
-                'symbol': symbol,
+                'symbol': base + '/' + quote,
                 'base': base,
                 'quote': quote,
+                'settle': None,
                 'baseId': baseId,
                 'quoteId': quoteId,
+                'settleId': None,
                 'baseNumericId': baseNumericId,
                 'quoteNumericId': quoteNumericId,
-                'info': market,
-                'active': active,
-                'maker': fee,
+                'type': 'spot',
+                'spot': True,
+                'margin': False,
+                'swap': False,
+                'future': False,
+                'option': False,
+                'active': self.safe_value(market, 'active'),
+                'contract': False,
+                'linear': None,
+                'inverse': None,
                 'taker': fee,
-                'precision': precision,
+                'maker': fee,
+                'contractSize': None,
+                'expiry': None,
+                'expiryDatetime': None,
+                'strike': None,
+                'optionType': None,
+                'precision': {
+                    'amount': self.parse_number(self.parse_precision(self.safe_string(market, 'currency_precision'))),
+                    'price': self.parse_number(self.parse_precision(self.safe_string(market, 'market_precision'))),
+                },
                 'limits': {
-                    'amount': {
-                        'min': self.safe_float(market, 'min_order_amount'),
+                    'leverage': {
+                        'min': None,
                         'max': None,
                     },
-                    'price': {'min': minPrice, 'max': None},
+                    'amount': {
+                        'min': self.safe_number(market, 'min_order_amount'),
+                        'max': None,
+                    },
+                    'price': {
+                        'min': minPrice,
+                        'max': None,
+                    },
                     'cost': {
                         'min': None,
                         'max': None,
                     },
                 },
+                'info': market,
             })
         return result
 
-    def fetch_ticker(self, symbol, params={}):
+    def fetch_ticker(self, symbol: str, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1ticker~1{currencyPairId}/get
+        fetches a price ticker, a statistical calculation with the information calculated over the past 24 hours for a specific market
+        :param str symbol: unified symbol of the market to fetch the ticker for
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `ticker structure <https://docs.ccxt.com/#/?id=ticker-structure>`
+        """
         self.load_markets()
         market = self.market(symbol)
         request = {
@@ -414,7 +566,40 @@ class stex(Exchange):
         ticker = self.safe_value(response, 'data', {})
         return self.parse_ticker(ticker, market)
 
-    def fetch_order_book(self, symbol, limit=None, params={}):
+    def fetch_time(self, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1ping/get
+        fetches the current integer timestamp in milliseconds from the exchange server
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns int: the current integer timestamp in milliseconds from the exchange server
+        """
+        response = self.publicGetPing(params)
+        #
+        #     {
+        #         "success": True,
+        #         "data": {
+        #             "server_datetime": {
+        #                 "date": "2019-01-22 15:13:34.233796",
+        #                 "timezone_type": 3,
+        #                 "timezone": "UTC"
+        #             },
+        #             "server_timestamp": 1548170014
+        #         }
+        #     }
+        #
+        data = self.safe_value(response, 'data', {})
+        serverDatetime = self.safe_value(data, 'server_datetime', {})
+        return self.parse8601(self.safe_string(serverDatetime, 'date'))
+
+    def fetch_order_book(self, symbol: str, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1orderbook~1{currencyPairId}/get
+        fetches information on open orders with bid(buy) and ask(sell) prices, volumes and other data
+        :param str symbol: unified symbol of the market to fetch the order book for
+        :param int|None limit: the maximum amount of order book entries to return
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: A dictionary of `order book structures <https://docs.ccxt.com/#/?id=order-book-structure>` indexed by market symbols
+        """
         self.load_markets()
         market = self.market(symbol)
         request = {
@@ -444,7 +629,7 @@ class stex(Exchange):
         #     }
         #
         orderbook = self.safe_value(response, 'data', {})
-        return self.parse_order_book(orderbook, None, 'bid', 'ask', 'price', 'amount')
+        return self.parse_order_book(orderbook, symbol, None, 'bid', 'ask', 'price', 'amount')
 
     def parse_ticker(self, ticker, market=None):
         #
@@ -487,57 +672,41 @@ class stex(Exchange):
         #     }
         #
         timestamp = self.safe_integer(ticker, 'timestamp')
-        symbol = None
-        marketId = self.safe_string(ticker, 'id')
-        if marketId in self.markets_by_id:
-            market = self.markets_by_id[marketId]
-        else:
-            marketId = self.safe_string(ticker, 'symbol')
-            if marketId is not None:
-                baseId, quoteId = marketId.split('_')
-                base = self.safe_currency_code(baseId)
-                quote = self.safe_currency_code(quoteId)
-                symbol = base + '/' + quote
-        if (symbol is None) and (market is not None):
-            symbol = market['symbol']
-        last = self.safe_float(ticker, 'last')
-        open = self.safe_float(ticker, 'open')
-        change = None
-        percentage = None
-        if last is not None:
-            if (open is not None) and (open > 0):
-                change = last - open
-                percentage = ((100 / open) * last) - 100
-        return {
+        marketId = self.safe_string_2(ticker, 'id', 'symbol')
+        symbol = self.safe_symbol(marketId, market, '_')
+        last = self.safe_string(ticker, 'last')
+        open = self.safe_string(ticker, 'open')
+        return self.safe_ticker({
             'symbol': symbol,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'high': self.safe_float(ticker, 'high'),
-            'low': self.safe_float(ticker, 'low'),
-            'bid': self.safe_float(ticker, 'bid'),
+            'high': self.safe_string(ticker, 'high'),
+            'low': self.safe_string(ticker, 'low'),
+            'bid': self.safe_string(ticker, 'bid'),
             'bidVolume': None,
-            'ask': self.safe_float(ticker, 'ask'),
+            'ask': self.safe_string(ticker, 'ask'),
             'askVolume': None,
             'vwap': None,
             'open': open,
             'close': last,
             'last': last,
             'previousClose': None,  # previous day close
-            'change': change,
-            'percentage': percentage,
+            'change': None,
+            'percentage': None,
             'average': None,
-            'baseVolume': self.safe_float(ticker, 'volumeQuote'),
-            'quoteVolume': self.safe_float(ticker, 'volume'),
+            'baseVolume': self.safe_string(ticker, 'volumeQuote'),
+            'quoteVolume': self.safe_string(ticker, 'volume'),
             'info': ticker,
-        }
+        }, market)
 
-    def parse_tickers(self, tickers, symbols=None):
-        result = []
-        for i in range(0, len(tickers)):
-            result.append(self.parse_ticker(tickers[i]))
-        return self.filter_by_array(result, 'symbol', symbols)
-
-    def fetch_tickers(self, symbols=None, params={}):
+    def fetch_tickers(self, symbols: Optional[List[str]] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1ticker/get
+        fetches price tickers for multiple markets, statistical calculations with the information calculated over the past 24 hours each market
+        :param [str]|None symbols: unified symbols of the markets to fetch the ticker for, all market tickers are returned if not assigned
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a dictionary of `ticker structures <https://docs.ccxt.com/#/?id=ticker-structure>`
+        """
         self.load_markets()
         response = self.publicGetTicker(params)
         #
@@ -588,7 +757,7 @@ class stex(Exchange):
         tickers = self.safe_value(response, 'data', [])
         return self.parse_tickers(tickers, symbols)
 
-    def parse_ohlcv(self, ohlcv, market=None, timeframe='1d', since=None, limit=None):
+    def parse_ohlcv(self, ohlcv, market=None):
         #
         #     {
         #         "time": 1566086400000,
@@ -601,19 +770,29 @@ class stex(Exchange):
         #
         return [
             self.safe_integer(ohlcv, 'time'),
-            self.safe_float(ohlcv, 'open'),
-            self.safe_float(ohlcv, 'high'),
-            self.safe_float(ohlcv, 'low'),
-            self.safe_float(ohlcv, 'close'),
-            self.safe_float(ohlcv, 'volume'),
+            self.safe_number(ohlcv, 'open'),
+            self.safe_number(ohlcv, 'high'),
+            self.safe_number(ohlcv, 'low'),
+            self.safe_number(ohlcv, 'close'),
+            self.safe_number(ohlcv, 'volume'),
         ]
 
-    def fetch_ohlcv(self, symbol, timeframe='1d', since=None, limit=None, params={}):
+    def fetch_ohlcv(self, symbol: str, timeframe='1m', since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1chart~1{currencyPairId}~1{candlesType}/get
+        fetches historical candlestick data containing the open, high, low, and close price, and the volume of a market
+        :param str symbol: unified symbol of the market to fetch OHLCV data for
+        :param str timeframe: the length of time each candle represents
+        :param int|None since: timestamp in ms of the earliest candle to fetch
+        :param int|None limit: the maximum amount of candles to fetch
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [[int]]: A list of candles ordered, open, high, low, close, volume
+        """
         self.load_markets()
         market = self.market(symbol)
         request = {
             'currencyPairId': market['id'],
-            'candlesType': self.timeframes[timeframe],  # default 1d
+            'candlesType': self.safe_string(self.timeframes, timeframe, timeframe),  # default 1d
             # 'timeStart': 1574709092,  # unix timestamp in seconds, required
             # 'timeEnd': 1574709092,  # unix timestamp in seconds, required
             # 'limit': 100,  # default 100, optional
@@ -629,7 +808,7 @@ class stex(Exchange):
             request['timeEnd'] = self.seconds()
             request['timeStart'] = request['timeEnd'] - timerange
         else:
-            request['timeStart'] = int(since / 1000)
+            request['timeStart'] = self.parse_to_int(since / 1000)
             request['timeEnd'] = self.sum(request['timeStart'], timerange)
         response = self.publicGetChartCurrencyPairIdCandlesType(self.extend(request, params))
         #
@@ -647,8 +826,8 @@ class stex(Exchange):
         #         ]
         #     }
         #
-        ohlcvs = self.safe_value(response, 'data', [])
-        return self.parse_ohlcvs(ohlcvs, market, timeframe, since, limit)
+        data = self.safe_value(response, 'data', [])
+        return self.parse_ohlcvs(data, market, timeframe, since, limit)
 
     def parse_trade(self, trade, market=None):
         #
@@ -676,16 +855,13 @@ class stex(Exchange):
         #
         id = self.safe_string(trade, 'id')
         timestamp = self.safe_timestamp(trade, 'timestamp')
-        price = self.safe_float(trade, 'price')
-        amount = self.safe_float(trade, 'amount')
-        cost = None
-        if (price is not None) and (amount is not None):
-            cost = price * amount
+        priceString = self.safe_string(trade, 'price')
+        amountString = self.safe_string(trade, 'amount')
         symbol = None
         if (symbol is None) and (market is not None):
             symbol = market['symbol']
         side = self.safe_string_lower_2(trade, 'type', 'trade_type')
-        return {
+        return self.safe_trade({
             'info': trade,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
@@ -695,13 +871,22 @@ class stex(Exchange):
             'type': None,
             'takerOrMaker': None,
             'side': side,
-            'price': price,
-            'amount': amount,
-            'cost': cost,
+            'price': priceString,
+            'amount': amountString,
+            'cost': None,
             'fee': None,
-        }
+        }, market)
 
-    def fetch_trades(self, symbol, since=None, limit=None, params={}):
+    def fetch_trades(self, symbol: str, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1trades~1{currencyPairId}/get
+        get the list of most recent trades for a particular symbol
+        :param str symbol: unified symbol of the market to fetch trades for
+        :param int|None since: timestamp in ms of the earliest trade to fetch
+        :param int|None limit: the maximum amount of trades to fetch
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `trade structures <https://docs.ccxt.com/en/latest/manual.html?#public-trades>`
+        """
         self.load_markets()
         market = self.market(symbol)
         request = {
@@ -716,7 +901,7 @@ class stex(Exchange):
             request['limit'] = limit  # currently limited to 100 or fewer
         if since is not None:
             request['sort'] = 'ASC'  # needed to make the from param work
-            request['from'] = int(since / 1000)
+            request['from'] = self.parse_to_int(since / 1000)
         response = self.publicGetTradesCurrencyPairId(self.extend(request, params))
         #
         #     {
@@ -735,7 +920,60 @@ class stex(Exchange):
         trades = self.safe_value(response, 'data', [])
         return self.parse_trades(trades, market, since, limit)
 
+    def fetch_trading_fee(self, symbol: str, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1fees~1{currencyPairId}/get
+        fetch the trading fees for a market
+        :param str symbol: unified market symbol
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `fee structure <https://docs.ccxt.com/#/?id=fee-structure>`
+        """
+        self.load_markets()
+        market = self.market(symbol)
+        request = {
+            'currencyPairId': market['id'],
+        }
+        response = self.tradingGetFeesCurrencyPairId(self.extend(request, params))
+        #
+        #     {
+        #         success: True,
+        #         data: {buy_fee: '0.00200000', sell_fee: '0.00200000'},
+        #         unified_message: {message_id: 'operation_successful', substitutions: []}
+        #      }
+        #
+        data = self.safe_value(response, 'data')
+        return {
+            'info': response,
+            'symbol': market['symbol'],
+            'maker': self.safe_number(data, 'sell_fee'),
+            'taker': self.safe_number(data, 'buy_fee'),
+            'percentage': True,
+            'tierBased': True,
+        }
+
+    def parse_balance(self, response):
+        result = {
+            'info': response,
+            'timestamp': None,
+            'datetime': None,
+        }
+        balances = self.safe_value(response, 'data', [])
+        for i in range(0, len(balances)):
+            balance = balances[i]
+            code = self.safe_currency_code(self.safe_string(balance, 'currency_id'))
+            account = self.account()
+            account['free'] = self.safe_string(balance, 'balance')
+            account['used'] = self.safe_string(balance, 'frozen_balance')
+            result[code] = account
+        return self.safe_balance(result)
+
     def fetch_balance(self, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1wallets/get
+        query for balance and get the amount of funds available for trading or funds locked in orders
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `balance structure <https://docs.ccxt.com/en/latest/manual.html?#balance-structure>`
+        """
         self.load_markets()
         # self.load_accounts()
         response = self.profileGetWallets(params)
@@ -782,16 +1020,7 @@ class stex(Exchange):
         #         ]
         #     }
         #
-        result = {'info': response}
-        balances = self.safe_value(response, 'data', [])
-        for i in range(0, len(balances)):
-            balance = balances[i]
-            code = self.safe_currency_code(self.safe_string(balance, 'currency_id'))
-            account = self.account()
-            account['free'] = self.safe_float(balance, 'balance')
-            account['used'] = self.safe_float(balance, 'frozen_balance')
-            result[code] = account
-        return self.parse_balance(result)
+        return self.parse_balance(response)
 
     def parse_order_status(self, status):
         statuses = {
@@ -845,45 +1074,29 @@ class stex(Exchange):
         #
         id = self.safe_string(order, 'id')
         status = self.parse_order_status(self.safe_string(order, 'status'))
-        symbol = None
-        marketId = self.safe_string(order, 'currency_pair_id')
-        if marketId in self.markets_by_id:
-            market = self.markets_by_id[marketId]
-        else:
-            marketId = self.safe_string(order, 'currency_pair_name')
-            if marketId is not None:
-                baseId, quoteId = marketId.split('_')
-                base = self.safe_currency_code(baseId)
-                quote = self.safe_currency_code(quoteId)
-                symbol = base + '/' + quote
-        if (symbol is None) and (market is not None):
-            symbol = market['symbol']
+        marketId = self.safe_string_2(order, 'currency_pair_id', 'currency_pair_name')
+        symbol = self.safe_symbol(marketId, market, '_')
         timestamp = self.safe_timestamp(order, 'timestamp')
-        price = self.safe_float(order, 'price')
-        amount = self.safe_float(order, 'initial_amount')
-        filled = self.safe_float(order, 'processed_amount')
+        price = self.safe_string(order, 'price')
+        amount = self.safe_string(order, 'initial_amount')
+        filled = self.safe_string(order, 'processed_amount')
         remaining = None
         cost = None
         if filled is not None:
             if amount is not None:
-                remaining = amount - filled
+                remaining = Precise.string_sub(amount, filled)
                 if self.options['parseOrderToPrecision']:
-                    remaining = float(self.amount_to_precision(symbol, remaining))
-                remaining = max(remaining, 0.0)
+                    remaining = self.amount_to_precision(symbol, remaining)
+                remaining = Precise.string_max(remaining, '0.0')
             if price is not None:
                 if cost is None:
-                    cost = price * filled
+                    cost = Precise.string_mul(price, filled)
         type = self.safe_string(order, 'original_type')
         if (type == 'BUY') or (type == 'SELL'):
             type = None
         side = self.safe_string_lower(order, 'type')
-        rawTrades = self.safe_value(order, 'trades')
-        trades = None
-        if rawTrades is not None:
-            trades = self.parse_trades(rawTrades, market, None, None, {
-                'symbol': symbol,
-                'order': id,
-            })
+        trades = self.safe_value(order, 'trades')
+        stopPrice = self.safe_number(order, 'trigger_price')
         result = {
             'info': order,
             'id': id,
@@ -893,8 +1106,12 @@ class stex(Exchange):
             'lastTradeTimestamp': None,
             'symbol': symbol,
             'type': type,
+            'timeInForce': None,
+            'postOnly': None,
             'side': side,
             'price': price,
+            'stopPrice': stopPrice,
+            'triggerPrice': stopPrice,
             'amount': amount,
             'cost': cost,
             'average': None,
@@ -911,7 +1128,7 @@ class stex(Exchange):
             if numFees > 0:
                 result['fees'] = []
                 for i in range(0, len(fees)):
-                    feeCost = self.safe_float(fees[i], 'amount')
+                    feeCost = self.safe_string(fees[i], 'amount')
                     if feeCost is not None:
                         feeCurrencyId = self.safe_string(fees[i], 'currency_id')
                         feeCurrencyCode = self.safe_currency_code(feeCurrencyId)
@@ -921,11 +1138,22 @@ class stex(Exchange):
                         })
             else:
                 result['fee'] = None
-        return result
+        return self.safe_order(result, market)
 
-    def create_order(self, symbol, type, side, amount, price=None, params={}):
+    def create_order(self, symbol: str, type, side: OrderSide, amount, price=None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1orders~1{currencyPairId}/post
+        create a trade order
+        :param str symbol: unified symbol of the market to create an order in
+        :param str type: 'market' or 'limit'
+        :param str side: 'buy' or 'sell'
+        :param float amount: how much of currency you want to trade in units of base currency
+        :param float|None price: the price at which the order is to be fullfilled, in units of the quote currency, ignored in market orders
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: an `order structure <https://docs.ccxt.com/#/?id=order-structure>`
+        """
         if type == 'market':
-            raise ExchangeError(self.id + ' createOrder allows limit orders only')
+            raise ExchangeError(self.id + ' createOrder() allows limit orders only')
         self.load_markets()
         market = self.market(symbol)
         if type == 'limit':
@@ -960,7 +1188,14 @@ class stex(Exchange):
         data = self.safe_value(response, 'data', {})
         return self.parse_order(data, market)
 
-    def fetch_order(self, id, symbol=None, params={}):
+    def fetch_order(self, id: str, symbol: Optional[str] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1order~1{orderId}/get
+        fetches information on an order made by the user
+        :param str|None symbol: unified symbol of the market the order was made in
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: An `order structure <https://docs.ccxt.com/#/?id=order-structure>`
+        """
         self.load_markets()
         request = {
             'orderId': id,
@@ -991,7 +1226,15 @@ class stex(Exchange):
             market = self.market(symbol)
         return self.parse_order(data, market)
 
-    def fetch_closed_order(self, id, symbol=None, params={}):
+    def fetch_closed_order(self, id: str, symbol: Optional[str] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading-History-and-Reports/paths/~1reports~1orders~1{orderId}/get
+        fetch an open order by it's id
+        :param str id: order id
+        :param str|None symbol: unified market symbol, default is None
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: an `order structure <https://docs.ccxt.com/#/?id=order-structure>`
+        """
         self.load_markets()
         request = {
             'orderId': id,
@@ -1038,11 +1281,30 @@ class stex(Exchange):
             market = self.market(symbol)
         return self.parse_order(data, market)
 
-    def fetch_order_trades(self, id, symbol=None, since=None, limit=None, params={}):
+    def fetch_order_trades(self, id: str, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        fetch all the trades made from a single order
+        :param str id: order id
+        :param str|None symbol: unified market symbol
+        :param int|None since: the earliest time in ms to fetch trades for
+        :param int|None limit: the maximum number of trades to retrieve
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `trade structures <https://docs.ccxt.com/#/?id=trade-structure>`
+        """
         order = self.fetch_closed_order(id, symbol, params)
         return order['trades']
 
-    def fetch_open_orders(self, symbol=None, since=None, limit=None, params={}):
+    def fetch_open_orders(self, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1orders/get
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1orders~1{currencyPairId}/get
+        fetch all unfilled currently open orders
+        :param str|None symbol: unified market symbol
+        :param int|None since: the earliest time in ms to fetch open orders for
+        :param int|None limit: the maximum number of  open orders structures to retrieve
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `order structures <https://docs.ccxt.com/#/?id=order-structure>`
+        """
         self.load_markets()
         market = None
         method = 'tradingGetOrders'
@@ -1081,7 +1343,15 @@ class stex(Exchange):
         data = self.safe_value(response, 'data', [])
         return self.parse_orders(data, market, since, limit)
 
-    def cancel_order(self, id, symbol=None, params={}):
+    def cancel_order(self, id: str, symbol: Optional[str] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1order~1{orderId}/delete
+        cancels an open order
+        :param str id: order id
+        :param str|None symbol: not used by stex cancelOrder()
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: An `order structure <https://docs.ccxt.com/#/?id=order-structure>`
+        """
         self.load_markets()
         request = {
             'orderId': id,
@@ -1134,16 +1404,24 @@ class stex(Exchange):
         numRejectedOrders = len(rejectedOrders)
         if numAcceptedOrders < 1:
             if numRejectedOrders < 1:
-                raise OrderNotFound(self.id + ' cancelOrder received an empty response: ' + self.json(response))
+                raise OrderNotFound(self.id + ' cancelOrder() received an empty response: ' + self.json(response))
             else:
                 return self.parse_order(rejectedOrders[0])
         else:
             if numRejectedOrders < 1:
                 return self.parse_order(acceptedOrders[0])
             else:
-                raise OrderNotFound(self.id + ' cancelOrder received an empty response: ' + self.json(response))
+                raise OrderNotFound(self.id + ' cancelOrder() received an empty response: ' + self.json(response))
 
-    def cancel_all_orders(self, symbol=None, params={}):
+    def cancel_all_orders(self, symbol: Optional[str] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1orders/delete
+        see https://apidocs.stex.com/#tag/Trading/paths/~1trading~1orders~1{currencyPairId}/delete
+        cancel all open orders
+        :param str|None symbol: unified market symbol, only orders in the market of self symbol are cancelled when symbol is not None
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `order structures <https://docs.ccxt.com/#/?id=order-structure>`
+        """
         self.load_markets()
         request = {}
         method = 'tradingDeleteOrders'
@@ -1164,9 +1442,18 @@ class stex(Exchange):
         #
         return response
 
-    def fetch_my_trades(self, symbol=None, since=None, limit=None, params={}):
+    def fetch_my_trades(self, symbol: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Trading-History-and-Reports/paths/~1reports~1trades~1{currencyPairId}/get
+        fetch all trades made by the user
+        :param str symbol: unified market symbol
+        :param int|None since: the earliest time in ms to fetch trades for
+        :param int|None limit: the maximum number of trades structures to retrieve
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `trade structures <https://docs.ccxt.com/#/?id=trade-structure>`
+        """
         if symbol is None:
-            raise ArgumentsRequired(self.id + ' fetchMyTrades requires a symbol argument')
+            raise ArgumentsRequired(self.id + ' fetchMyTrades() requires a symbol argument')
         self.load_markets()
         market = self.market(symbol)
         request = {
@@ -1200,13 +1487,20 @@ class stex(Exchange):
         trades = self.safe_value(response, 'data', [])
         return self.parse_trades(trades, market, since, limit)
 
-    def create_deposit_address(self, code, params={}):
+    def create_deposit_address(self, code: str, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1wallets~1{currencyId}/post
+        create a currency deposit address
+        :param str code: unified currency code of the currency for the deposit address
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: an `address structure <https://docs.ccxt.com/#/?id=address-structure>`
+        """
         self.load_markets()
         currency = self.currency(code)
         request = {
             'currencyId': currency['id'],
             # Default value is the value that represents legacy protocol.
-            # In case of USDT it is 10 as Tether OMNI was the default previously.
+            # In case of USDT it is 10 OMNI was the default previously.
             # The list of protocols can be obtained from the /public/currencies/{currencyId}
             # 'protocol_id': 10,
         }
@@ -1274,7 +1568,14 @@ class stex(Exchange):
             'info': response,
         }
 
-    def fetch_deposit_address(self, code, params={}):
+    def fetch_deposit_address(self, code: str, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1wallets~1{walletId}/get
+        fetch the deposit address for a currency associated with self account
+        :param str code: unified currency code
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: an `address structure <https://docs.ccxt.com/#/?id=address-structure>`
+        """
         self.load_markets()
         balance = self.fetch_balance()
         wallets = self.safe_value(balance['info'], 'data', [])
@@ -1350,11 +1651,12 @@ class stex(Exchange):
             'currency': code,
             'address': address,
             'tag': tag,
+            'network': None,
             'info': response,
         }
 
     def sign(self, path, api='public', method='GET', params={}, headers=None, body=None):
-        url = self.urls['api'] + '/' + api + '/' + self.implode_params(path, params)
+        url = self.urls['api']['rest'] + '/' + api + '/' + self.implode_params(path, params)
         query = self.omit(params, self.extract_params(path))
         if api == 'public':
             if query:
@@ -1380,7 +1682,7 @@ class stex(Exchange):
             'hodl': 'pending',
             'amount too low': 'failed',
             'not confirmed': 'pending',
-            'cancelled by User': 'canceled',
+            'cancelled by user': 'canceled',
             'approved': 'pending',
             'finished': 'ok',
             'withdrawal error': 'failed',
@@ -1392,7 +1694,7 @@ class stex(Exchange):
 
     def parse_transaction(self, transaction, currency=None):
         #
-        # fetchDeposits
+        # fetchDeposit & fetchDeposits
         #
         #     {
         #         "id": 123654789,
@@ -1412,7 +1714,7 @@ class stex(Exchange):
         #         "confirmations": "1 of 2"
         #     }
         #
-        # fetchWithdrawals
+        # fetchWithdrawal and fetchWithdrawals
         #
         #     {
         #         "id": 65899,
@@ -1456,26 +1758,28 @@ class stex(Exchange):
         if (code is None) and (currency is not None):
             code = currency['code']
         type = 'deposit' if ('deposit_status_id' in transaction) else 'withdrawal'
-        amount = self.safe_float(transaction, 'amount')
+        amount = self.safe_number(transaction, 'amount')
         status = self.parse_transaction_status(self.safe_string_lower(transaction, 'status'))
         timestamp = self.safe_timestamp_2(transaction, 'timestamp', 'created_ts')
         updated = self.safe_timestamp(transaction, 'updated_ts')
         txid = self.safe_string(transaction, 'txid')
         fee = None
-        feeCost = self.safe_float(transaction, 'fee')
+        feeCost = self.safe_number(transaction, 'fee')
         if feeCost is not None:
-            feeCurrencyId = self.safe_string(transaction, 'fee_currency_id', 'deposit_fee_currency_id')
+            feeCurrencyId = self.safe_string_2(transaction, 'fee_currency_id', 'deposit_fee_currency_id')
             feeCurrencyCode = self.safe_currency_code(feeCurrencyId)
             fee = {
                 'cost': feeCost,
                 'currency': feeCurrencyCode,
             }
+        network = self.safe_string(withdrawalAddress, 'protocol_name')
         return {
             'info': transaction,
             'id': id,
             'txid': txid,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
+            'network': network,
             'addressFrom': None,
             'address': address,
             'addressTo': address,
@@ -1490,7 +1794,65 @@ class stex(Exchange):
             'fee': fee,
         }
 
-    def fetch_deposits(self, code=None, since=None, limit=None, params={}):
+    def fetch_deposit(self, id: str, code: Optional[str] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1deposits~1{id}/get
+        fetch information on a deposit
+        :param str id: deposit id
+        :param str|None code: not used by stex fetchDeposit()
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `transaction structure <https://docs.ccxt.com/#/?id=transaction-structure>`
+        """
+        self.load_markets()
+        request = {
+            'id': id,
+        }
+        response = self.profileGetDepositsId(self.extend(request, params))
+        #
+        #     {
+        #         success: True,
+        #         data: {
+        #             id: '21974074',
+        #             currency_id: '272',
+        #             block_explorer_url: 'https://omniexplorer.info/search/',
+        #             currency_code: 'USDT',
+        #             deposit_fee_currency_id: '272',
+        #             deposit_fee_currency_code: 'USDT',
+        #             amount: '11.00000000',
+        #             fee: '0.00000000',
+        #             deposit_status_id: '3',
+        #             status: 'FINISHED',
+        #             status_color: '#00BE75',
+        #             txid: '15b50da4600a5021dbddaed8f4a71de093bf206ea66eb4ab2f151e3e9e2fed71',
+        #             protocol_id: '24',
+        #             confirmations: '129 of 20',
+        #             created_at: '2022-05-16 16:38:40',
+        #             timestamp: '1652719120',
+        #             protocol_specific_settings: [{
+        #                 protocol_name: 'TRON',
+        #                 protocol_id: '24',
+        #                 block_explorer_url: 'https://tronscan.org/#/transaction/'
+        #             }]
+        #         },
+        #         unified_message: {
+        #             message_id: 'operation_successful',
+        #             substitutions: []
+        #         }
+        #     }
+        #
+        data = self.safe_value(response, 'data', {})
+        return self.parse_transaction(data)
+
+    def fetch_deposits(self, code: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1deposits/get
+        fetch all deposits made to an account
+        :param str|None code: unified currency code
+        :param int|None since: the earliest time in ms to fetch deposits for
+        :param int|None limit: the maximum number of deposits structures to retrieve
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `transaction structures <https://docs.ccxt.com/#/?id=transaction-structure>`
+        """
         self.load_markets()
         currency = None
         request = {}
@@ -1532,9 +1894,74 @@ class stex(Exchange):
         #     }
         #
         deposits = self.safe_value(response, 'data', [])
-        return self.parse_transactions(deposits, code, since, limit)
+        return self.parse_transactions(deposits, currency, since, limit)
 
-    def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
+    def fetch_withdrawal(self, id: str, code: Optional[str] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1withdrawals~1{id}/get
+        fetch data on a currency withdrawal via the withdrawal id
+        :param str id: withdrawal id
+        :param str|None code: not used by stex.fetchWithdrawal
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `transaction structure <https://docs.ccxt.com/#/?id=transaction-structure>`
+        """
+        self.load_markets()
+        request = {
+            'id': id,
+        }
+        response = self.profileGetWithdrawalsId(self.extend(request, params))
+        #
+        #     {
+        #         "success": True,
+        #         "data": {
+        #             "id": 65899,
+        #             "amount": "0.00600000",
+        #             "currency_id": 1,
+        #             "currency_code": "BTC",
+        #             "fee": "0.00400000",
+        #             "fee_currency_id": 1,
+        #             "fee_currency_code": "BTC",
+        #             "withdrawal_status_id": 1,
+        #             "status": "Not Confirmed",
+        #             "status_color": "#BC3D51",
+        #             "created_at": "2019-01-21 09:36:05",
+        #             "created_ts": "1548063365",
+        #             "updated_at": "2019-01-21 09:36:05",
+        #             "updated_ts": "1548063365",
+        #             "reason": "string",
+        #             "txid": null,
+        #             "protocol_id": 0,
+        #             "withdrawal_address": {
+        #                 "address": "0X12WERTYUIIJHGFVBNMJHGDFGHJ765SDFGHJ",
+        #                 "address_name": "Address",
+        #                 "additional_address_parameter": "qwertyuiopasdfghjkl",
+        #                 "additional_address_parameter_name": "Destination Tag",
+        #                 "notification": "",
+        #                 "protocol_id": 10,
+        #                 "protocol_name": "Tether OMNI",
+        #                 "supports_new_address_creation": False
+        #             },
+        #             "protocol_specific_settings": {
+        #                 "protocol_name": "Tether OMNI",
+        #                 "protocol_id": 10,
+        #                 "block_explorer_url": "https://omniexplorer.info/search/"
+        #             }
+        #         }
+        #     }
+        #
+        data = self.safe_value(response, 'data', {})
+        return self.parse_transaction(data)
+
+    def fetch_withdrawals(self, code: Optional[str] = None, since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1withdrawals/get
+        fetch all withdrawals made from an account
+        :param str|None code: unified currency code
+        :param int|None since: the earliest time in ms to fetch withdrawals for
+        :param int|None limit: the maximum number of withdrawals structures to retrieve
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns [dict]: a list of `transaction structures <https://docs.ccxt.com/#/?id=transaction-structure>`
+        """
         self.load_markets()
         currency = None
         request = {}
@@ -1587,9 +2014,248 @@ class stex(Exchange):
         #     }
         #
         withdrawals = self.safe_value(response, 'data', [])
-        return self.parse_transactions(withdrawals, code, since, limit)
+        return self.parse_transactions(withdrawals, currency, since, limit)
 
-    def withdraw(self, code, amount, address, tag=None, params={}):
+    def transfer(self, code: str, amount, fromAccount, toAccount, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1referral~1bonus_transfer~1{currencyId}/post
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1wallets~1{walletId}~1hold_amount/post
+        transfer currency internally between wallets on the same account
+        :param str code: unified currency code
+        :param float amount: amount to transfer
+        :param str fromAccount: account to transfer from
+        :param str toAccount: account to transfer to
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `transfer structure <https://docs.ccxt.com/#/?id=transfer-structure>`
+        """
+        self.load_markets()
+        currency = self.currency(code)
+        method = None
+        request = {}
+        if fromAccount == 'referal' and toAccount == 'spot':
+            request['currencyId'] = currency['id']
+            method = 'profilePostReferralBonusTransferCurrencyId'
+        elif toAccount == 'hold':
+            request['walletId'] = fromAccount
+            amount = self.currency_to_precision(code, amount)
+            amount = Precise.string_neg(amount)
+            request['amount'] = amount
+            method = 'profilePostWalletsWalletIdHoldAmount'
+        elif fromAccount == 'hold':
+            request['walletId'] = toAccount
+            request['amount'] = amount
+            method = 'profilePostWalletsWalletIdHoldAmount'
+        else:
+            raise ExchangeError(self.id + ' transfer() only allows transfers of referal to spot and between a walletId and funding')
+        response = getattr(self, method)(self.extend(request, params))
+        #
+        #  profilePostReferralBonusTransferCurrencyId
+        #     {
+        #         "success": True,
+        #         "data": ""
+        #     }
+        #
+        #  profilePostWalletsWalletIdHoldAmount
+        #     {
+        #         success: True,
+        #         data: {
+        #             id: '4055802',
+        #             currency_id: '272',
+        #             currency_code: 'USDT',
+        #             currency_name: 'TetherUSD',
+        #             balance: '10.00000000',
+        #             frozen_balance: '0.00000000',
+        #             bonus_balance: '0.00000000',
+        #             hold_balance: '1.00000000',
+        #             total_balance: '11.00000000',
+        #             disable_deposits: False,
+        #             disable_withdrawals: False,
+        #             withdrawal_limit: '0.00000000',
+        #             delisted: False,
+        #             disabled: False,
+        #             deposit_address: null,
+        #             multi_deposit_addresses: [{
+        #                 address: 'TYzhabfHWMLgLnMW46ZyUHkUVJPXaDgdxK',
+        #                 address_name: 'Deposit Address',
+        #                 additional_address_parameter: null,
+        #                 additional_address_parameter_name: null,
+        #                 notification: '',
+        #                 protocol_id: '24',
+        #                 protocol_name: 'TRON',
+        #                 supports_new_address_creation: False
+        #             }],
+        #             contract_or_asset_id: '31',
+        #             contract_field_name: null,
+        #             withdrawal_additional_field_name: null,
+        #             depo_message: '',
+        #             wd_message: '',
+        #             currency_type_id: '23',
+        #             protocol_specific_settings: [{
+        #                 {
+        #                     protocol_name: 'ERC20',
+        #                     protocol_id: '5',
+        #                     active: True,
+        #                     disable_deposits: False,
+        #                     disable_withdrawals: False,
+        #                     withdrawal_limit: '0',
+        #                     deposit_fee_currency_id: '272',
+        #                     deposit_fee_currency_code: 'USDT',
+        #                     deposit_fee_percent: '0',
+        #                     deposit_fee_const: '0',
+        #                     withdrawal_fee_currency_id: '272',
+        #                     withdrawal_fee_currency_code: 'USDT',
+        #                     withdrawal_fee_const: '10',
+        #                     withdrawal_fee_percent: '0',
+        #                     block_explorer_url: 'https://etherscan.io/tx/',
+        #                     contract_or_asset_id: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+        #                     contract_field_name: '',
+        #                     withdrawal_additional_field_name: '',
+        #                     depo_message: '',
+        #                     wd_message: ''
+        #                 },
+        #                 ...
+        #             ],
+        #             coin_info: {
+        #                 twitter: 'https://twitter.com/Tether_to',
+        #                 version: '',
+        #                 facebook: 'https://www.facebook.com/tether.to',
+        #                 telegram: '',
+        #                 icon_large: 'https://app-coin-images.stex.com/large/usdt.png',
+        #                 icon_small: 'https://app-coin-images.stex.com/small/usdt.png',
+        #                 description: 'Tether(USDT) is a cryptocurrency with a value meant to mirror the value of the U.S. dollar. The idea was to create a stable cryptocurrency that can be used like digital dollars. Coins that serve self purpose of being a stable dollar substitute are called “stable coins.” Tether is the most popular stable coin and even acts dollar replacement on many popular exchanges! According to their site, Tether converts cash into digital currency, to anchor or “tether” the value of the coin to the price of national currencies like the US dollar, the Euro, and the Yen. Like other cryptos it uses blockchain. Unlike other cryptos, it is [according to the official Tether site] “100% backed by USD”(USD is held in reserve). The primary use of Tether is that it offers some stability to the otherwise volatile crypto space and offers liquidity to exchanges who can’t deal in dollars and with banks(for example to the sometimes controversial but leading exchange Bitfinex).The digital coins are issued by a company called Tether Limited that is governed by the laws of the British Virgin Islands, according to the legal part of its website. It is incorporated in Hong Kong. It has emerged that Jan Ludovicus van der Velde is the CEO of cryptocurrency exchange Bitfinex, which has been accused of being involved in the price manipulation of bitcoin,. Many people trading on exchanges, including Bitfinex, will use tether to buy other cryptocurrencies like bitcoin. Tether Limited argues that using self method to buy virtual currencies allows users to move fiat in and out of an exchange more quickly and cheaply. Also, exchanges typically have rocky relationships with banks, and using Tether is a way to circumvent that.USDT is fairly simple to use. Once on exchanges like Poloniex or Bittrex, it can be used to purchase Bitcoin and other cryptocurrencies. It can be easily transferred from an exchange to any Omni Layer enabled wallet. Tether has no transaction fees, although external wallets and exchanges may charge one. In order to convert USDT to USD and vise versa through the Tether.to Platform, users must pay a small fee. Buying and selling Tether for Bitcoin can be done through a variety of exchanges like the ones mentioned previously or through the Tether.to platform, which also allows the conversion between USD to and from your bank account.',
+        #                 official_site: 'https://tether.to/',
+        #                 official_block_explorer: 'https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7'
+        #             },
+        #             rates: {
+        #                 BTC: '0.00003372',
+        #                 USD: '1'
+        #             }
+        #         },
+        #         unified_message: {
+        #             message_id: 'operation_successful',
+        #             substitutions: []
+        #         }
+        #     }
+        #
+        data = self.safe_value(response, 'data', {})
+        transfer = self.parse_transfer(data, currency)
+        transferOptions = self.safe_value(self.options, 'transfer', {})
+        fillResponseFromRequest = self.safe_value(transferOptions, 'fillResponseFromRequest', True)
+        if fillResponseFromRequest:
+            transfer['fromAccount'] = fromAccount
+            transfer['toAccount'] = toAccount
+            if isinstance(amount, str) and Precise.string_lt(amount, '0'):
+                amount = self.parse_number(Precise.string_neg(amount))
+            transfer['amount'] = amount
+            if transfer['currency'] is None:
+                transfer['currency'] = code
+        return transfer
+
+    def parse_transfer(self, transfer, currency=None):
+        #
+        #     {
+        #         "id": 45875,
+        #         "currency_id": 1,
+        #         "currency_code": "USDT",
+        #         "currency_name": "TetherUSD",
+        #         "balance": "0.198752",
+        #         "frozen_balance": "1.5784",
+        #         "bonus_balance": "0.000",
+        #         "hold_balance": "0.000",
+        #         "total_balance": "1.777152",
+        #         "disable_deposits": False,
+        #         "disable_withdrawals": False,
+        #         "withdrawal_limit": "string",
+        #         "delisted": False,
+        #         "disabled": False,
+        #         "deposit_address": {
+        #             "address": "0X12WERTYUIIJHGFVBNMJHGDFGHJ765SDFGHJ",
+        #             "address_name": "Address",
+        #             "additional_address_parameter": "qwertyuiopasdfghjkl",
+        #             "additional_address_parameter_name": "Destination Tag",
+        #             "notification": "",
+        #             "protocol_id": 10,
+        #             "protocol_name": "Tether OMNI",
+        #             "supports_new_address_creation": False
+        #         },
+        #         "multi_deposit_addresses": [{
+        #             "address": "0X12WERTYUIIJHGFVBNMJHGDFGHJ765SDFGHJ",
+        #             "address_name": "Address",
+        #             "additional_address_parameter": "qwertyuiopasdfghjkl",
+        #             "additional_address_parameter_name": "Destination Tag",
+        #             "notification": "",
+        #             "protocol_id": 10,
+        #             "protocol_name": "Tether OMNI",
+        #             "supports_new_address_creation": False
+        #         }],
+        #         "withdrawal_additional_field_name": "Payment ID(optional)",
+        #         "currency_type_id": 23,
+        #         "protocol_specific_settings": [{
+        #             "protocol_name": "Tether OMNI",
+        #             "protocol_id": 10,
+        #             "active": True,
+        #             "disable_deposits": False,
+        #             "disable_withdrawals": False,
+        #             "withdrawal_limit": 0,
+        #             "deposit_fee_currency_id": 272,
+        #             "deposit_fee_currency_code": "USDT",
+        #             "deposit_fee_percent": 0,
+        #             "deposit_fee_const": 0,
+        #             "withdrawal_fee_currency_id": 1,
+        #             "withdrawal_fee_currency_code": "USDT",
+        #             "withdrawal_fee_const": 0.002,
+        #             "withdrawal_fee_percent": 0,
+        #             "block_explorer_url": "https://omniexplorer.info/search/",
+        #             "withdrawal_additional_field_name": ""
+        #         }],
+        #         "coin_info": {
+        #             "twitter": "https://twitter.com/btc",
+        #             "version": "",
+        #             "facebook": "https://www.facebook.com/bitcoins",
+        #             "telegram": "",
+        #             "icon_large": "https://app-coin-images.stex.com/large/btc.png",
+        #             "icon_small": "https://app-coin-images.stex.com/small/btc.png",
+        #             "description": "Bitcoin is the first successful internet money based on peer-to-peer technology;....",
+        #             "official_site": "http://www.bitcoin.org",
+        #             "official_block_explorer": "https://blockchair.com/bitcoin/"
+        #         },
+        #         "rates": {
+        #             "BTC": 0.000001
+        #         }
+        #     }
+        #
+        currencyId = self.safe_string(transfer, 'currency_id')
+        code = None
+        if currencyId in self.currencies_by_id:
+            currency = self.currencies_by_id[currencyId]
+        else:
+            code = self.common_currency_code(self.safe_string(transfer, 'currency_code'))
+        if code is None:
+            code = self.safe_value(currency, 'code')
+        return {
+            'info': transfer,
+            'id': self.safe_string(transfer, 'id'),
+            'timestamp': None,
+            'datetime': None,
+            'currency': code,
+            'amount': None,
+            'fromAccount': None,
+            'toAccount': None,
+            'status': None,
+        }
+
+    def withdraw(self, code: str, amount, address, tag=None, params={}):
+        """
+        see https://apidocs.stex.com/#tag/Profile/paths/~1profile~1withdraw/post
+        make a withdrawal
+        :param str code: unified currency code
+        :param float amount: the amount to withdraw
+        :param str address: the address to withdraw to
+        :param str|None tag:
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a `transaction structure <https://docs.ccxt.com/#/?id=transaction-structure>`
+        """
+        tag, params = self.handle_withdraw_tag_and_params(tag, params)
         self.check_address(address)
         self.load_markets()
         currency = self.currency(code)
@@ -1602,6 +2268,12 @@ class stex(Exchange):
         }
         if tag is not None:
             request['additional_address_parameter'] = tag
+        networks = self.safe_value(self.options, 'networks', {})
+        networkRaw = self.safe_string_upper(params, 'network')  # self line allows the user to specify either ERC20 or ETH
+        network = self.safe_integer(networks, networkRaw, self.parse_to_int(networkRaw))  # handle ERC20>ETH alias
+        if network is not None:
+            request['protocol_id'] = network
+            params = self.omit(params, 'network')
         response = self.profilePostWithdraw(self.extend(request, params))
         #
         #     {
@@ -1639,8 +2311,15 @@ class stex(Exchange):
         data = self.safe_value(response, 'data', {})
         return self.parse_transaction(data, currency)
 
-    def fetch_funding_fees(self, codes=None, params={}):
-        response = self.publicGetCurrencies(params)
+    def fetch_transaction_fees(self, codes=None, params={}):
+        """
+        *DEPRECATED* please use fetchDepositWithdrawFees instead
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1currencies/get
+        :param [str]|None codes: list of unified currency codes
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a list of `fee structures <https://docs.ccxt.com/#/?id=fee-structure>`
+        """
+        self.load_markets()
         #
         #     {
         #         "success": True,
@@ -1680,23 +2359,140 @@ class stex(Exchange):
         #         ]
         #     }
         #
-        data = self.safe_value(response, 'data', [])
-        withdrawFees = {}
-        depositFees = {}
-        for i in range(0, len(data)):
-            id = self.safe_string(data[i], 'id')
-            code = self.safe_currency_code(id)
-            withdrawFees[code] = self.safe_float(data[i], 'withdrawal_fee_const')
-            depositFees[code] = self.safe_float(data[i], 'deposit_fee_const')
-        return {
-            'withdraw': withdrawFees,
-            'deposit': depositFees,
-            'info': response,
+        currencyKeys = list(self.currencies.keys())
+        result = {}
+        for i in range(0, len(currencyKeys)):
+            code = currencyKeys[i]
+            currency = self.currencies[code]
+            if codes is not None and not self.in_array(code, codes):
+                continue
+            info = self.safe_value(currency, 'info')
+            result[code] = {
+                'withdraw': self.safe_number(currency, 'fee'),
+                'deposit': self.safe_number(info, 'deposit_fee_const'),
+                'info': info,
+            }
+        return result
+
+    def fetch_deposit_withdraw_fees(self, codes=None, params={}):
+        """
+        fetch deposit and withdraw fees
+        see https://apidocs.stex.com/#tag/Public/paths/~1public~1currencies/get
+        :param [str]|None codes: list of unified currency codes
+        :param dict params: extra parameters specific to the stex api endpoint
+        :returns dict: a list of `fee structures <https://docs.ccxt.com/#/?id=fee-structure>`
+        """
+        self.load_markets()
+        response = self.publicGetCurrencies(params)
+        #
+        #     {
+        #         "success": True,
+        #         "data": [
+        #             {
+        #                 "id": 1,
+        #                 "code": "BTC",
+        #                 "name": "Bitcoin",
+        #                 "active": True,
+        #                 "delisted": False,
+        #                 "precision": 8,
+        #                 "minimum_tx_confirmations": 24,
+        #                 "minimum_withdrawal_amount": "0.009",
+        #                 "minimum_deposit_amount": "0.000003",
+        #                 "deposit_fee_currency_id": 1,
+        #                 "deposit_fee_currency_code": "ETH",
+        #                 "deposit_fee_const": "0.00001",
+        #                 "deposit_fee_percent": "0",
+        #                 "withdrawal_fee_currency_id": 1,
+        #                 "withdrawal_fee_currency_code": "ETH",
+        #                 "withdrawal_fee_const": "0.0015",
+        #                 "withdrawal_fee_percent": "0",
+        #                 "withdrawal_limit": "string",
+        #                 "block_explorer_url": "https://blockchain.info/tx/",
+        #                 "protocol_specific_settings": [
+        #                     {
+        #                         "protocol_name": "Tether OMNI",
+        #                         "protocol_id": 10,
+        #                         "active": True,
+        #                         "withdrawal_fee_currency_id": 1,
+        #                         "withdrawal_fee_const": 0.002,
+        #                         "withdrawal_fee_percent": 0,
+        #                         "block_explorer_url": "https://omniexplorer.info/search/"
+        #                     }
+        #                 ]
+        #             }
+        #             ...
+        #         ]
+        #     }
+        #
+        data = self.safe_value(response, 'data')
+        return self.parse_deposit_withdraw_fees(data, codes, 'code')
+
+    def parse_deposit_withdraw_fee(self, fee, currency=None):
+        #
+        #    {
+        #        "id": 1,
+        #        "code": "BTC",
+        #        "name": "Bitcoin",
+        #        "active": True,
+        #        "delisted": False,
+        #        "precision": 8,
+        #        "minimum_tx_confirmations": 24,
+        #        "minimum_withdrawal_amount": "0.009",
+        #        "minimum_deposit_amount": "0.000003",
+        #        "deposit_fee_currency_id": 1,
+        #        "deposit_fee_currency_code": "ETH",
+        #        "deposit_fee_const": "0.00001",
+        #        "deposit_fee_percent": "0",
+        #        "withdrawal_fee_currency_id": 1,
+        #        "withdrawal_fee_currency_code": "ETH",
+        #        "withdrawal_fee_const": "0.0015",
+        #        "withdrawal_fee_percent": "0",
+        #        "withdrawal_limit": "string",
+        #        "block_explorer_url": "https://blockchain.info/tx/",
+        #        "protocol_specific_settings": [
+        #            {
+        #                "protocol_name": "Tether OMNI",
+        #                "protocol_id": 10,
+        #                "active": True,
+        #                "withdrawal_fee_currency_id": 1,
+        #                "withdrawal_fee_const": 0.002,
+        #                "withdrawal_fee_percent": 0,
+        #                "block_explorer_url": "https://omniexplorer.info/search/"
+        #            }
+        #        ]
+        #    }
+        #
+        result = {
+            'withdraw': {
+                'fee': self.safe_number(fee, 'withdrawal_fee_const'),
+                'percentage': False,
+            },
+            'deposit': {
+                'fee': self.safe_number(fee, 'deposit_fee_const'),
+                'percentage': False,
+            },
+            'networks': {},
         }
+        networks = self.safe_value(fee, 'protocol_specific_settings', [])
+        for i in range(0, len(networks)):
+            network = networks[i]
+            networkId = self.safe_string(network, 'protocol_name')
+            networkCode = self.network_id_to_code(networkId)
+            result['networks'][networkCode] = {
+                'withdraw': {
+                    'fee': self.safe_number(network, 'withdrawal_fee_const'),
+                    'percentage': False,
+                },
+                'deposit': {
+                    'fee': None,
+                    'percentage': None,
+                },
+            }
+        return result
 
     def handle_errors(self, httpCode, reason, url, method, headers, body, response, requestHeaders, requestBody):
         if response is None:
-            return  # fallback to default error handler
+            return None  # fallback to default error handler
         #
         #     {"success":false,"message":"Wrong parameters","errors":{"candleType":["Invalid Candle Type!"]}}
         #     {"success":false,"message":"Wrong parameters","errors":{"time":["timeStart or timeEnd is less then 1"]}}
@@ -1709,3 +2505,4 @@ class stex(Exchange):
             self.throw_exactly_matched_exception(self.exceptions['exact'], message, feedback)
             self.throw_broadly_matched_exception(self.exceptions['broad'], message, feedback)
             raise ExchangeError(feedback)  # unknown message
+        return None

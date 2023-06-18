@@ -2,14 +2,14 @@
 
 The easiest way to install the ccxt library is to use builtin package managers:
 
-- [ccxt in **NPM**](http://npmjs.com/package/ccxt) (JavaScript / Node v7.6+)
+- [ccxt in **NPM**](http://npmjs.com/package/ccxt) (JavaScript / Node v15+)
 - [ccxt in **PyPI**](https://pypi.python.org/pypi/ccxt) (Python 3)
 
 This library is shipped as an all-in-one module implementation with minimalistic dependencies and requirements:
 
-- [`ccxt.js`](https://github.com/ccxt/ccxt/blob/master/ccxt.js) in JavaScript
-- [`./python/`](https://github.com/ccxt/ccxt/blob/master/python/) in Python (generated from JS)
-- [`ccxt.php`](https://github.com/ccxt/ccxt/blob/master/ccxt.php) in PHP (generated from JS)
+- [ccxt.js](https://github.com/ccxt/ccxt/blob/master/ccxt.js) in JavaScript
+- [./python/](https://github.com/ccxt/ccxt/blob/master/python/) in Python (generated from JS)
+- [ccxt.php](https://github.com/ccxt/ccxt/blob/master/ccxt.php) in PHP (generated from JS)
 
 You can also clone it into your project directory from [ccxt GitHub repository](https://github.com/ccxt/ccxt) and copy files
 manually into your working directory with language extension appropriate for your environment.
@@ -22,7 +22,7 @@ An alternative way of installing this library is to build a custom bundle from s
 
 ### JavaScript (NPM)
 
-JavaScript version of ccxt works both in Node and web browsers. Requires ES6 and `async/await` syntax support (Node 7.6.0+). When compiling with Webpack and Babel, make sure it is [not excluded](https://github.com/ccxt-dev/ccxt/issues/225#issuecomment-331582275) in your `babel-loader` config.
+JavaScript version of ccxt works both in Node and web browsers. Requires ES6 and `async/await` syntax support (Node 15+). When compiling with Webpack and Babel, make sure it is [not excluded](https://github.com/ccxt-dev/ccxt/issues/225#issuecomment-331582275) in your `babel-loader` config.
 
 [ccxt crypto trading library in npm](http://npmjs.com/package/ccxt)
 
@@ -30,47 +30,138 @@ JavaScript version of ccxt works both in Node and web browsers. Requires ES6 and
 npm install ccxt
 ```
 
-```JavaScript
+```javascript
 var ccxt = require ('ccxt')
 
 console.log (ccxt.exchanges) // print all available exchanges
 ```
 
-#### Node.js + Windows
-
-Windows users having difficulties installing `w3`, `scrypt` or `node-gyp` dependencies for the ccxt library, try installing `scrypt` first:
-
-```
-npm install -g web3 --unsafe-perm=true --allow-root
-```
-
-or
-
-```
-sudo npm install -g web3 --unsafe-perm=true --allow-root
-```
-
-Then install ccxt as usual with `npm install ccxt`.
-
-If that does not help, please, follow here: https://github.com/nodejs/node-gyp#on-windows
-
 ### JavaScript (for use with the `<script>` tag):
 
 All-in-one browser bundle (dependencies included), served from a CDN of your choice:
 
-* jsDelivr: https://cdn.jsdelivr.net/npm/ccxt@1.28.78/dist/ccxt.browser.js
-* unpkg: https://unpkg.com/ccxt@1.28.78/dist/ccxt.browser.js
+* jsDelivr: https://cdn.jsdelivr.net/npm/ccxt@3.1.43/dist/ccxt.browser.js
+* unpkg: https://unpkg.com/ccxt@3.1.43/dist/ccxt.browser.js
+* ccxt: https://cdn.ccxt.com/latest/ccxt.min.js
 
-You can obtain a live-updated version of the bundle by removing the version number from the URL (the `@a.b.c` thing) — however, we do not recommend to do that, as it may break your app eventually. Also, please keep in mind that we are not responsible for the correct operation of those CDN servers.
+You can obtain a live-updated version of the bundle by removing the version number from the URL (the `@a.b.c` thing) or the /latest/ on our cdn — however, we do not recommend to do that, as it may break your app eventually. Also, please keep in mind that we are not responsible for the correct operation of those CDN servers.
 
-```HTML
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/ccxt@1.28.78/dist/ccxt.browser.js"></script>
+```html
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/ccxt@3.1.43/dist/ccxt.browser.js"></script>
 ```
 
-Creates a global `ccxt` object:
+We also provide webpack minified and tree-shaken versions of the library starting from version 3.0.35 - Visit https://cdn.ccxt.com to browse the prebundled versions we distribute.
 
-```JavaScript
+| name           | size   |
+|----------------|--------|
+| binance.min.js | ~300kb |
+| bitget.min.js  | ~200kb |
+| bitmart.min.js | ~200kb |
+| bybit.min.js   | ~300kb |
+| ccxt.min.js    | ~3mb   |
+| huobi.min.js   | ~300kb |
+| kucoin.min.js  | ~200kb |
+| mexc.min.js    | ~200kb |
+| okx.min.js     | ~250kb |
+
+Note: the the file sizes are subject to change.
+
+```html
+<script type="text/javascript" src="https://cdn.ccxt.com/3.0.35/ccxt.min.js"></script>
+```
+
+Here is an [example](https://cdn.ccxt.com/example.html) using a custom bybit bundle from our cdn in the browser
+
+```html
+<html>
+<head>
+<script type="text/javascript" src="https://cdn.ccxt.com/latest/bybit.min.js"></script>
+<script>
+async function update () {
+    const bid = document.querySelector ('#bid')
+    const ask = document.querySelector ('#ask')
+    const updates = document.querySelector ('#updates')
+
+    const bybit = new ccxt.pro.bybit ()
+    window.bybit = bybit
+    const ticker = await bybit.fetchTicker ('BTC/USDT:USDT')
+    bid.innerText = ticker.bid.toFixed (2)
+    ask.innerText = ticker.ask.toFixed (2)
+    while (true) {
+        const trades = await bybit.watchTrades ('BTC/USDT:USDT')
+        // const trades = await bybit.fetchTrades ('BTC/USDT:USDT', 1)
+        const trade = trades[0]
+
+        const notify = document.createElement ('li')
+        notify.innerHTML = `<strong>${trade.datetime.slice (11, 19)}</strong> &nbsp; ${trade.amount.toFixed (3)} btc was bought at ${trade.price.toFixed (1)}`
+        notify.style = 'padding-top: 8px;'
+        updates.appendChild (notify)
+    }
+}
+</script>
+</head>
+
+<body onload="update()">
+<h3>The current bitcoin bid on bybit is <span id="bid"></span><br><br>and the best ask is <span id="ask"></span></h3>
+<ul id="updates" style="color: red;"></ul>
+</body>
+</html>
+```
+
+The default entry point for the browser is `window.ccxt` and it creates a global ccxt object:
+
+```javascript
 console.log (ccxt.exchanges) // print all available exchanges
+```
+
+### Custom JavaScript Builds
+
+It takes time to load all scripts and resources. The problem with in-browser usage is that the entire CCXT library weighs a few megabytes which is a lot for a web application. Sometimes it is also critical for a Node app. Therefore to lower the loading time you might want to make your own custom build of CCXT for your app with just the exchanges you need. CCXT uses webpack to remove dead code paths to make the package smaller.
+
+Follow these steps:
+
+```bash
+# 1. clone the repository
+
+git clone --depth 1 https://github.com/ccxt/ccxt.git
+
+# 2. go to the cloned repository
+
+cd ccxt
+
+# 3. install dependencies
+
+npm install
+
+# 4. edit exchanges.cfg for the exchanges of your interest
+
+echo -e "binance\nokx" > exchanges.cfg
+
+# 5. build the library
+
+npm run export-exchanges
+npm run bundle-browser
+
+# 6a. copy the browser file to your project folder if you are buildig a web application
+
+cp dist/ccxt.browser.js path/to/your/html/project
+
+# 6b. or link against the library if you are building a Node.js application
+npm link
+cd path/to/your/node/project
+npm link ccxt
+
+# 6c. directly import ccxt from the entry point
+touch app.js
+
+# inside of app.js
+
+import ccxt from './js/ccxt.js'
+console.log (ccxt)
+
+# now you can run your app like so
+
+node app.js
 ```
 
 ### Python
@@ -81,20 +172,20 @@ console.log (ccxt.exchanges) // print all available exchanges
 pip install ccxt
 ```
 
-```Python
+```python
 import ccxt
 print(ccxt.exchanges) # print a list of all available exchange classes
 ```
 
 The library supports concurrent asynchronous mode with asyncio and async/await in Python 3.5.3+
 
-```Python
+```python
 import ccxt.async_support as ccxt # link against the asynchronous version of ccxt
 ```
 
 ### PHP
 
-The autoloadable version of ccxt can be installed with [**Packagist/Composer**](https://packagist.org/packages/ccxt/ccxt) (PHP 5.4+).
+The autoloadable version of ccxt can be installed with [**Packagist/Composer**](https://packagist.org/packages/ccxt/ccxt) (PHP 7.0+).
 
 It can also be installed from the source code: [**`ccxt.php`**](https://raw.githubusercontent.com/ccxt/ccxt/master/php)
 
@@ -106,14 +197,18 @@ It requires common PHP modules:
 - iconv
 - gmp (this is a built-in extension as of PHP 7.2+)
 
-```PHP
+```php
 include "ccxt.php";
 var_dump (\ccxt\Exchange::$exchanges); // print a list of all available exchange classes
 ```
 
+The library supports concurrent asynchronous mode using tools from [RecoilPHP](https://github.com/recoilphp/recoil) and [ReactPHP](https://reactphp.org/) in PHP 7.2+. Read the [Manual](https://docs.ccxt.com) for more details.
+
 ### Docker
 
 You can get CCXT installed in a container along with all the supported languages and dependencies. This may be useful if you want to contribute to CCXT (e.g. run the build scripts and tests — please see the [Contributing](https://github.com/ccxt/ccxt/blob/master/CONTRIBUTING.md) document for the details on that).
+
+You don't need the Docker image if you're not going to develop CCXT. If you just want to use CCXT – just install it as a regular package into your project.
 
 Using `docker-compose` (in the cloned CCXT repository):
 
@@ -130,7 +225,7 @@ docker run -it ccxt
 
 ## Proxy
 
-In some specific cases you may want a proxy, if you experience issues with [DDoS protection by Cloudflare](https://github.com/ccxt/ccxt/wiki/Manual#ddos-protection-by-cloudflare) or your network / country / IP is rejected by their filters.
+In some specific cases you may want a proxy, if you experience issues with [DDoS protection by Cloudflare](https://docs.ccxt.com/#/?id=ddos-protection-by-cloudflare-incapsula) or your network / country / IP is rejected by their filters.
 
 **Bear in mind that each added intermediary contributes to the overall latency and roundtrip time. Longer delays can result in price slippage.**
 
@@ -138,7 +233,7 @@ In some specific cases you may want a proxy, if you experience issues with [DDoS
 
 In order to use proxies with JavaScript, one needs to pass the proxying `agent` option to the exchange class instance constructor (or set the `exchange.agent` property later after instantiation in runtime):
 
-```JavaScript
+```javascript
 const ccxt = require ('ccxt')
     , HttpsProxyAgent = require ('https-proxy-agent')
 
@@ -152,10 +247,17 @@ const kraken = new ccxt.kraken ({ agent })
 
 The python version of the library uses the [python-requests](python-requests.org) package for underlying HTTP and supports all means of customization available in the `requests` package, including proxies.
 
-You can configure proxies by setting the environment variables HTTP_PROXY and HTTPS_PROXY.
+You can configure proxies by setting `trust_env` to `True`(default to `False`) and setting the environment variables HTTP_PROXY and HTTPS_PROXY.
+
+```python
+import ccxt
+exchange = ccxt.binance({
+    'trust_env': True
+})
+```
 
 ```shell
-$ export HTTP_PROXY="http://10.10.1.10:3128"
+$ export HTTP_PROXY="http://10.10.1.10:3128"  # these proxies won't work for you, they are here for example
 $ export HTTPS_PROXY="http://10.10.1.10:1080"
 ```
 
@@ -163,7 +265,7 @@ After exporting the above variables with your proxy settings, all reqeusts from 
 
 You can also set them programmatically:
 
-```Python
+```python
 import ccxt
 exchange = ccxt.poloniex({
     'proxies': {
@@ -175,7 +277,7 @@ exchange = ccxt.poloniex({
 
 Or
 
-```Python
+```python
 import ccxt
 exchange = ccxt.poloniex()
 exchange.proxies = {
@@ -188,7 +290,7 @@ exchange.proxies = {
 
 - https://github.com/ccxt/ccxt/blob/master/examples/py/proxy-sync-python-requests-2-and-3.py
 
-```Python
+```python
 # -*- coding: utf-8 -*-
 
 import os
@@ -201,7 +303,7 @@ exchange = ccxt.poloniex({
     #
     # ↓ The "proxy" property setting below is for CORS-proxying only!
     # Do not use it if you don't know what a CORS proxy is.
-    # https://github.com/ccxt/ccxt/wiki/Install#cors-access-control-allow-origin
+    # https://docs.ccxt.com/en/latest/install.html#cors-access-control-allow-origin
     # You should only use the "proxy" setting if you're having a problem with Access-Control-Allow-Origin
     # In Python you rarely need to use it, if ever at all.
     #
@@ -215,8 +317,9 @@ exchange = ccxt.poloniex({
     # This is the setting you should be using with synchronous version of ccxt in Python 3
     #
     'proxies': {
-        'http': 'http://10.10.1.10:3128',
-        'https': 'http://10.10.1.10:1080',
+        # change the following for your own proxy addresses
+        'http': 'http://10.10.1.10:3128',  # these are examples values that will not work for you
+        'https': 'http://10.10.1.10:1080',  # these are examples values that will not work for you
     },
 })
 
@@ -229,7 +332,7 @@ pprint(exchange.fetch_ticker('ETH/BTC'))
 
 - https://github.com/ccxt/ccxt/blob/master/examples/py/proxy-asyncio-aiohttp-python-3.py
 
-```Python
+```python
 # -*- coding: utf-8 -*-
 
 import asyncio
@@ -243,15 +346,15 @@ async def test_gdax():
 
     exchange = ccxt.poloniex({
         #
-        # ↓ The "proxy" property setting below is for CORS-proxying only!
+        # The "proxy" property setting below is for CORS-proxying only!
         # Do not use it if you don't know what a CORS proxy is.
-        # https://github.com/ccxt/ccxt/wiki/Install#cors-access-control-allow-origin
+        # https://docs.ccxt.com/en/latest/install.html#cors-access-control-allow-origin
         # You should only use the "proxy" setting if you're having a problem with Access-Control-Allow-Origin
         # In Python you rarely need to use it, if ever at all.
         #
         # 'proxy': 'https://cors-anywhere.herokuapp.com/',
         #
-        # ↓ The "aiohttp_proxy" setting is for HTTP(S)-proxying (SOCKS, etc...)
+        # The "aiohttp_proxy" setting is for HTTP(S)-proxying (SOCKS, etc...)
         # It is a standard method of sending your requests through your proxies
         # This gets passed to the `asyncio` and `aiohttp` implementation directly
         # You can use this setting as documented here:
@@ -273,7 +376,7 @@ async def test_gdax():
     return ticker
 
 if __name__ == '__main__':
-    pprint(asyncio.get_event_loop().run_until_complete(test_gdax()))
+    pprint(asyncio.run(test_gdax()))
 ```
 
 A more detailed documentation on using proxies with the sync python version of the ccxt library can be found here:
@@ -287,7 +390,7 @@ A more detailed documentation on using proxies with the sync python version of t
 pip install aiohttp_socks
 ```
 
-```Python
+```python
 import ccxt.async_support as ccxt
 import aiohttp
 import aiohttp_socks
@@ -299,7 +402,6 @@ async def test():
 
     exchange = ccxt.binance({
         'session': session,
-        'enableRateLimit': True,
         # ...
     })
 
@@ -320,44 +422,18 @@ You can still use the ccxt library from your browser via a CORS-proxy, which is 
 
 The absolute exchange endpoint URL is appended to `proxy` string before HTTP request is sent to exchange. The `proxy` setting is an empty string `''` by default. Below are examples of a non-empty `proxy` string (last slash is mandatory!):
 
-- `kraken.proxy = 'https://crossorigin.me/'`
-- `gdax.proxy   = 'https://cors-anywhere.herokuapp.com/'`
+- `kraken.proxy = 'https://cors-anywhere.herokuapp.com/'`
 
 To run your own CORS proxy locally you can either set up one of the existing ones or make a quick script of your own, like shown below.
 
 ### Node.js CORS Proxy
 
-```JavaScript
+```javascript
 // JavaScript CORS Proxy
 // Save this in a file like cors.js and run with `node cors [port]`
 // It will listen for your requests on the port you pass in command line or port 8080 by default
 let port = (process.argv.length > 2) ? parseInt (process.argv[2]) : 8080; // default
 require ('cors-anywhere').createServer ().listen (port, 'localhost')
-```
-
-### Python CORS Proxy
-
-```Python
-#!/usr/bin/env python
-# Python CORS Proxy
-# Save this in a file like cors.py and run with `python cors.py [port]` or `cors [port]`
-try:
-    # Python 3
-    from http.server import HTTPServer, SimpleHTTPRequestHandler, test as test_orig
-    import sys
-    def test (*args):
-        test_orig (*args, port = int (sys.argv[1]) if len (sys.argv) > 1 else 8080)
-except ImportError: # Python 2
-    from BaseHTTPServer import HTTPServer, test
-    from SimpleHTTPServer import SimpleHTTPRequestHandler
-
-class CORSRequestHandler (SimpleHTTPRequestHandler):
-    def end_headers (self):
-        self.send_header ('Access-Control-Allow-Origin', '*')
-        SimpleHTTPRequestHandler.end_headers (self)
-
-if __name__ == '__main__':
-    test (CORSRequestHandler, HTTPServer)
 ```
 
 ### Testing CORS
